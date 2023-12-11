@@ -2,21 +2,22 @@
 
 ## 1. 채팅 프로그램 폴더 구조 (socket 버전)
 
-- ipc
-    - socket
-        - Makefile      
-        - output
-            - outputfile        
-        - src           
-            - includes  
-                - inf
-                    - inf_svr_sock.h   
-            - inf       
-                - inf_svr_sock.c
-            server_main.c            
-- utils                 
-    - chat              
-README.md
+.
+├── ipc
+│   └── socket
+│       ├── Makefile
+│       ├── output
+│       └── src
+│           ├── includes
+│           │   └── inf
+│           │       └── inf_svr_sock.h
+│           ├── inf
+│           │   └── inf_svr_sock.c
+│           └── server_main.c
+├── README.md
+└── utils
+    └── chat
+
 
 
 ## 2. 폴더 구조 설명
