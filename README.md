@@ -2,7 +2,7 @@
 
 ## 1. 채팅 프로그램 폴더 구조 (socket 버전)
 
-.
+```
 ├── ipc
 │   └── socket
 │       ├── Makefile
@@ -17,7 +17,7 @@
 ├── README.md
 └── utils
     └── chat
-
+```
 
 
 ## 2. 폴더 구조 설명
