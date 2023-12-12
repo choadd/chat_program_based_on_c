@@ -30,31 +30,33 @@ c. 1:1 메세지 전송
 
 ```
 ├── ipc
-│   └── socket
-│       ├── Makefile
-│       ├── output
-│       └── src
-│           ├── includes
-│           │   └── inf
-│           │       └── inf_svr_sock.h
-│           ├── inf
-│           │   └── inf_svr_sock.c
-│           └── server_main.c
+│   └── socket
+│       ├── Makefile
+│       ├── output
+│       └── src
+│           ├── includes
+│           │   ├── inf
+│           │   │   └── inf_svr_sock.h
+│           │   └── svr_macro.h
+│           ├── inf
+│           │   └── inf_svr_sock.c
+│           └── server_main.c
 ├── README.md
 └── utils
     └── chat
+
 ```
 
 
 ## 3. 폴더 구조 설명
 - ipc
     - socket
-        - Makefile      : 프로젝트 빌드 Makefile
-        - output        : 빌드된 실행파일/결과물 저장 경로
-        - src           : 소스코드가 위치하는 경로
-            - includes  : 헤더파일이 위치하는 경로
-                - inf   : 소켓 인터페이스에 대한 헤더파일
-            - inf       : 소켓 인터페이스 관련 소스파일
-
-- utils                 : 사용자 유틸리티 경로
-    - chat              : 채팅 관련 유틸리티 파일
+        - Makefile              : 프로젝트 빌드 Makefile
+        - output                : 빌드된 실행파일/결과물 저장 경로
+        - src                   : 소스코드가 위치하는 경로
+            - includes          : 헤더파일이 위치하는 경로
+                - inf/*         : 소켓 인터페이스에 대한 헤더파일
+                - svr_marcor.h  : 매크로 함수 정의 
+            - inf               : 소켓 인터페이스 관련 소스파일
+- utils                         : 사용자 유틸리티 경로
+    - chat                      : 채팅 관련 유틸리티 파일
