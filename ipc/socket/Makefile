@@ -3,7 +3,8 @@ CC = gcc
 OUTPUT = ./output
 
 CFLAGS  += -Wall -Wextra
-LFLAGS += -I ./src/includes
+LFLAGS += -I ./src/includes -lpthread
+# LFLAGS +=  
 
 EXEC = SERVER_MAIN
 
@@ -20,7 +21,7 @@ EXEO = $(EXES:%.c=%.o)
 	$(CC) $(CFLAGS) $(DFLAGS) -c -o $@ $< $(LFLAGS)
 	
 $(EXEC) : $(EXEO)
-	$(CC) $(CFLAGS) $(DFLAGS) -o $(OUTPUT)/$(EXEC) $(EXEO) $(LFALAGS)	
+	$(CC) $(CFLAGS) $(DFLAGS) -o $(OUTPUT)/$(EXEC) $(EXEO) $(LFLAGS)	
 
 build : $(EXEC)
 
