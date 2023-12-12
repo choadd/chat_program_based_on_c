@@ -31,7 +31,8 @@ void svr_signal()
     printf("[MAIN] server main signal processing\n");
 }
 
-int main(int argc, char **argv) 
+//int argc, char **argv
+int main() 
 {
     svr_option();
     svr_signal();
