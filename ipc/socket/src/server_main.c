@@ -41,7 +41,7 @@ int main()
 
     while(1){ // chat server is run?
         printf("[MAIN] Keepalive\n");
-        sleep(1);
+        sleep(3);
     }
 
     svr_cleanup();

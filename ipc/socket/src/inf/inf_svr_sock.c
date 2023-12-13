@@ -10,7 +10,7 @@
 #include <inf/inf_svr_sock.h>
 #include <svr_macro.h>
 
-#define BUFF_SIZE 100
+#define BUFF_SIZE 128
 #define EPOLL_SIZE 10
 
 THREAD_DEFINE(inf_svr);
@@ -29,6 +29,16 @@ static struct inf_svr_device inf_svr_device_pt = {
 
 struct inf_svr_device * inf_svr_device_get_pt(void){
     return &inf_svr_device_pt;
+}
+
+int inf_svr_send(int fd, void *data, size_t data_size)
+{
+    int ret = -1;
+    if(fd > 0){
+        ret = send(fd, data, data_size, 0);
+    }
+    printf("[THREAD] inf_svr -- send message\n");
+    return ret;
 }
 
 THREAD_FUNC(inf_svr){
@@ -89,6 +99,13 @@ THREAD_FUNC(inf_svr){
                     continue;
                 }
                 printf("[THREAD] inf_svr -- connected client : %d\n", c_sock);
+
+                // TODO: 닉네임 관련 함수 필요.
+                // char nick_name[BUFF_SIZE] = "select your nickname";
+                // inf_svr_send(event.data.fd, nick_name, sizeof(nick_name));
+                read(event.data.fd, buf, BUFF_SIZE);
+                printf("get name : %s\n", buf);
+
             } else {
                 str_len = read(ep_events[i].data.fd, buf, BUFF_SIZE);
                 if(str_len == 0){
@@ -99,6 +116,8 @@ THREAD_FUNC(inf_svr){
                     //  send func
                     buf[str_len] = '\0';
                     printf("[THREAD] inf_svr -- Received message from client: %s\n", buf);
+                    inf_svr_send(ep_events[i].data.fd, buf, str_len);
+                    // write(ep_events[i].data.fd, buf, str_len);
                 }
             }
         }
@@ -134,14 +153,6 @@ int inf_svr_init(void)
     printf("[THREAD] inf_svr -- init\n");
     THREAD_CREATE(inf_svr, NULL);
     
-    return ret;
-}
-
-int inf_svr_send(int fd, void *data, size_t data_size)
-{
-    int ret = -1;
-
-    printf("[THREAD] inf_svr -- send message\n");
     return ret;
 }
 
