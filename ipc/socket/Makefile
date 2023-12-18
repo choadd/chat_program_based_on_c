@@ -12,6 +12,8 @@ EXED = ./src
 
 EXES = $(EXED)/server_main.o \
 		$(EXED)/inf/inf_svr_sock.o \
+		$(EXED)/linkedList/LinkedList.o \
+		$(EXED)/user/User.o \
 
 all : $(EXEC)
 
