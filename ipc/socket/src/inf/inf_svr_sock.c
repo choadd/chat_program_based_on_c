@@ -11,6 +11,7 @@
 #include <svr_macro.h>
 #include <linkedList/LinkedList.h>
 #include <user/User.h>
+// #include <user/UserService.h>
 
 #define BUFF_SIZE 128
 #define EPOLL_SIZE 10
@@ -43,12 +44,31 @@ int inf_svr_send(int fd, void *data, size_t data_size)
     return ret;
 }
 
-User * add_user(int fd, char *name)
-{
-    User * user = (User *)malloc(sizeof(User));
-    create_user(user, fd, name);
+User *add_user(int fd, char *name) {
+    User *user = (User *)malloc(sizeof(User));
 
-    return user;    
+    if (user != NULL) {
+        user->name = (char *)malloc(strlen(name) + 1);
+        if (user->name != NULL) {
+            name[sizeof(name)-1] = '\0';
+            strcpy(user->name, name);
+            create_user(user, fd, user->name);
+        } else {
+            free(user);
+            user = NULL;
+        }
+    }
+
+    return user;
+}
+void handle_user_req(List list, User *user, char msg[BUFF_SIZE])
+{
+    if(LFirst(&list, &user)){
+        show_user(user);
+        while(LNext(&list, &user)){
+            show_user(user);
+        }
+    }
 }
 
 THREAD_FUNC(inf_svr){
@@ -57,6 +77,7 @@ THREAD_FUNC(inf_svr){
     socklen_t c_addr_size;
     int str_len;
     char buf[BUFF_SIZE];
+    char nick_buf[BUFF_SIZE];
 
     struct epoll_event *ep_events;
     struct epoll_event event;
@@ -102,7 +123,17 @@ THREAD_FUNC(inf_svr){
         event_cnt = epoll_wait(ep_fd, ep_events, EPOLL_SIZE, -1);
         if(event_cnt == -1){
             printf("[THREAD] inf_svr -- epoll wait error!\n");
-            break;
+            continue;
+        }
+
+        // thread exit
+        if(!THREAD_CHECK(inf_svr)){
+            if(LFirst(&list, &user)){
+                LRemove(&list);
+                while(LNext(&list, &user)){
+                    LRemove(&list);
+                }
+            }
         }
 
         for (int i = 0; i < event_cnt; i++){
@@ -117,14 +148,12 @@ THREAD_FUNC(inf_svr){
                     close(c_sock);
                     continue;
                 } else{
-                    printf("[THREAD] inf_svr -- connected client : %d\n", c_sock);
-                    read(event.data.fd, buf, BUFF_SIZE);
-                    
-                    // 유저 생성 (fd값, 유저이름)
-                    user = add_user(c_sock, buf);
+                    read(event.data.fd, nick_buf, BUFF_SIZE);
+
+                    user = add_user(c_sock, nick_buf);
                     LInsert(&list, user);
 
-
+                    printf("[THREAD] inf_svr -- connected user name : %s\n", user->name);
                 }
             } else {
                 str_len = read(ep_events[i].data.fd, buf, BUFF_SIZE);
@@ -132,8 +161,7 @@ THREAD_FUNC(inf_svr){
                     epoll_ctl(ep_fd, EPOLL_CTL_DEL, ep_events[i].data.fd, NULL);
                     close(ep_events[i].data.fd);
 
-
-                    // TODO: 클라이언트 삭제하는 함수로 분리해야함
+                    // 접속 종료시 클라이언트 삭제
                     if(LFirst(&list, &user)){
                         if(user->fd == ep_events[i].data.fd){
                             LRemove(&list);
@@ -146,19 +174,20 @@ THREAD_FUNC(inf_svr){
 
                     printf("[THREAD] inf_svr -- closed client : %d\n", ep_events[i].data.fd);
                 }else{
-                    //  send func
                     buf[str_len] = '\0';
                     printf("[THREAD] inf_svr -- Received message from client: %s\n", buf);
 
-                    // TODO: 전체 유저 조회 함수 만들기 -> 클라이언트가 명령으로 list입력시
-                    // if(LFirst(&list, &user)){
-                    //     show_user(user);
-                    //     while(LNext(&list, &user)){
-                    //         show_user(user);
-                    //     }
-                    // }
+                    // 접속중인 유저 리스트 조회
+                    printf("\n[THREAD] inf_svr -- USER LIST \n\n");
+                    if(LFirst(&list, &user)){
+                        show_user(user);
+                        while(LNext(&list, &user)){
+                            show_user(user);
+                        }
+                    }
+                    printf("[THREAD] inf_svr -- USER LIST END \n");
 
-                    // TODO: 함수 분리해야함 -> broadcase 함수
+                    // 메세지가 온 클라이언트를 제외하고 브로드캐스트
                     if(LFirst(&list, &user)){
                         if(user->fd != ep_events[i].data.fd){
                             inf_svr_send(user->fd, buf, str_len); 
@@ -169,31 +198,12 @@ THREAD_FUNC(inf_svr){
                         }
                     }
                 }
-            }
-        }
-    }
+            } // epoll client connect
+        } // epoll for end
+    } // epoll while end
 
-    // if(ep_events != NULL){
-    //     FREE(ep_events);
-    // }
-
-    // if(svr_sock >= 0){
-    //     close(svr_sock);
-    //     svr_sock = -1;
-    // }
-    // printf("server socket thread End!\n");
-    // return;
-// error:
-//     if(ep_events != NULL){
-//         FREE(ep_events);
-//     }
-
-//     if(svr_sock >= 0){
-//         close(svr_sock);
-//         svr_sock = -1;
-//     }
-//     printf("server socket thread error!\n");
-//     return;
+    close(svr_sock);
+    return;
 }
 
 int inf_svr_init(void)
@@ -212,5 +222,5 @@ void inf_svr_cleanup(void)
 
     THREAD_EXIT(inf_svr);
 
-    return ;
+    return;
 }
