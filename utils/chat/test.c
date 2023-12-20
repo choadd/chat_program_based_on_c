@@ -1,232 +1,126 @@
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
-#include <sys/types.h>
-#include <time.h>
-#include <unistd.h>
+#include <arpa/inet.h>
+#include <pthread.h>
 
-#define MAXSIZE     16384 
-#define SERV_PORT   9000
-#define FDSIZE      1024
-#define EPOLLEVENTS 20
+#define MAX_EVENTS 10
+#define MAX_MSG_LEN 100
 
-struct global_args {
-    int ret;        /* -p option to print what the server returns */
-    int time;       /* -t option to tell how much time we will run */
-    char *ip;       /* -a option to tell which server ip to connect */
-    int len;        /* -l option to tell how many bytes we will send */
-};
+static char name[MAX_MSG_LEN];
 
-struct statistics {
-    clock_t start_time;
-    clock_t total_delay;
-    int query_num;
-    int byte_num;
-};
+void *receive_thread(void *arg) {
+    int sockfd = *((int *)arg);
+    char buffer[MAX_MSG_LEN];
 
-static void handle_connection(int sockfd, struct global_args *args,
-                              struct statistics *stat);
-static void handle_events(int epollfd, struct epoll_event *events,
-                          int num, int sockfd, char *buf, int len,
-                          struct statistics *stat, int echo);
-static void do_read(int epollfd, int sockfd, char *buf,
-                    int len, struct statistics *stat, int do_echo);
-static void do_write(int epollfd, int sockfd, char *buf,
-                     int len, struct statistics *stat);
-static void add_event(int epollfd, int fd, int state);
-static void delete_event(int epollfd, int fd, int state);
-static void modify_event(int epollfd, int fd, int state);
-static void display_usage();
-static void parse_args(int argc, char *argv[], struct global_args *args); 
-
-static const char *optString = "pt:a:l:h";
-static int time_flag = 0;
-
-void set_time_flag() {
-    time_flag = 1;
-}
-
-int main(int argc, char *argv[]) {
-    struct global_args args;
-    struct sockaddr_in servaddr;
-    struct statistics stat; 
-    int sockfd;
-
-    args.ret = 0;
-    args.time = 10;
-    args.ip = "127.0.0.1";
-    args.len = 10;
-    
-    memset(&stat, 0, sizeof(struct statistics));
-
-    parse_args(argc, argv, &args);
-    signal(SIGALRM, set_time_flag);
-
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-
-    bzero(&servaddr, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_port = htons(SERV_PORT);
-    inet_pton(AF_INET, args.ip, &servaddr.sin_addr);
-    connect(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
-
-    alarm(args.time);
-    handle_connection(sockfd, &args, &stat);
+    // FIXME: max buffer size 조절해야함
+    while (1) {
+        int bytes_received = recv(sockfd, buffer, MAX_MSG_LEN, 0);
+        if (bytes_received <= 0) {
+            perror("Connection closed or recv error");
+            break;
+        }
+        buffer[bytes_received] = '\0';
+        printf("%s", buffer);
+    }
 
     close(sockfd);
-    return 0;
+    pthread_exit(NULL);
 }
 
-static void parse_args(int argc, char *argv[], struct global_args *args) {
-    int opt;
-    opt = getopt(argc, argv, optString);
-    while(opt != -1) {
-        switch(opt) {
-            case 'p':
-                args->ret = 1; /* true */
-                break;
-            case 't':
-                args->time = atoi(optarg);
-                break;
-            case 'a':
-                args->ip = optarg;
-                break;
-            case 'l':
-                args->len = atoi(optarg);
-                break;
-            case 'h':   /* fall-through is intentional */
-            default:
-                display_usage();
-                break;
+void *sended_thread(void *arg) {
+    int sockfd = *((int *)arg);
+    char input[MAX_MSG_LEN];
+    char msg[202];
+
+    // TODO: Enter exception -> func '\n' ? while : return;
+    while (1) {
+        fgets(input, MAX_MSG_LEN, stdin);
+        size_t len = strlen(name);
+        if (len > 0 && name[len - 1] == '\n') {
+            name[len - 1] = '\0'; // 개행 문자를 널 문자로 대체
         }
-        opt = getopt(argc, argv, optString);
-    }
-}
-    
-static void display_usage() {
-    printf("\t-p Print what the server returns.\n");
-    printf("\t-t Specify how much time to run, default 10s\n");
-    printf("\t-a Specify server IP addr, default 127.0.0.1\n");
-    printf("\t-l Specify length to send in each query, default 10B\n");
-    printf("\t-h Print this information\n");
-    exit(0);
-}
-
-static void handle_connection(int sockfd, struct global_args *args,
-                              struct statistics *stat) {
-    int epollfd;
-    int ready_cnt;
-    unsigned long byte_cnt;
-    int total_delay;
-    struct epoll_event events[EPOLLEVENTS];
-    char *buf = (char *)malloc(args->len);
-    memset(buf, 'a', args->len);
-
-    epollfd = epoll_create(FDSIZE);
-    add_event(epollfd, sockfd, EPOLLOUT);
-    while (time_flag == 0) {
-        ready_cnt = epoll_wait(epollfd, events, EPOLLEVENTS, -1);
-        handle_events(epollfd, events, ready_cnt, sockfd, buf,
-                      args->len, stat, args->ret);
+        snprintf(msg, sizeof(msg), "[%s]:%s", name, input);
+        send(sockfd, msg, strlen(msg), 0);
     }
 
-    byte_cnt = (unsigned long)stat->query_num * args->len;
-    total_delay = (1000000 * stat->total_delay) / CLOCKS_PER_SEC;
-    printf("QPS = %d\n", stat->query_num/args->time);
-    printf("BandWidth(Byte/sec) = %lu\n", byte_cnt/args->time);
-    printf("AvgDelay(ms) = %d\n", total_delay/stat->query_num);
-
-    free(buf);
-    close(epollfd);
+    close(sockfd);
+    pthread_exit(NULL);
 }
 
-static void
-handle_events(int epollfd, struct epoll_event *events, int num, int sockfd,
-              char *buf, int len, struct statistics *stat, int echo) {
-    int i;
-    int fd;
-    for (i = 0; i < num; i++) {
-        fd = events[i].data.fd;
-        if (events[i].events & EPOLLIN)
-            do_read(epollfd, sockfd, buf, len, stat, echo);
-        else if (events[i].events & EPOLLOUT)
-            do_write(epollfd, sockfd, buf, len, stat);
+
+int main() {
+    int sockfd;
+    struct sockaddr_in server_addr;
+    struct epoll_event event, events[MAX_EVENTS];
+
+    // 서버 소켓 생성
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd == -1) {
+        perror("Socket creation failed");
+        return EXIT_FAILURE;
     }
-}
 
-static void do_read(int epollfd, int sockfd, char *buf,
-                    int len, struct statistics *stat, int do_echo) {
-    int nread;
-    nread = read(sockfd, buf, len);
-    stat->total_delay += clock() - stat->start_time;
+    // 서버 주소 설정
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(3000);
+    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-    if (nread == -1) {
-        perror("Read error:");
-        delete_event(epollfd, sockfd, EPOLLIN);
+    // 서버에 연결
+    if (connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
+        perror("Connection failed");
         close(sockfd);
+        return EXIT_FAILURE;
     }
-    else if (nread == 0) {
-        fprintf(stderr, "Server closed.\n");
-        delete_event(epollfd, sockfd, EPOLLIN);
-        close(sockfd);
-    }
-    else {
-        if (do_echo)
-            printf("Server return : %s\n", buf);
 
-        modify_event(epollfd, sockfd, EPOLLOUT);
+    int epoll_fd = epoll_create1(0);
+    if (epoll_fd == -1) {
+        perror("Epoll creation failed");
+        close(sockfd);
+        return EXIT_FAILURE;
     }
+
+    event.events = EPOLLIN | EPOLLET; // 수신 및 에지 트리거 설정
+    event.data.fd = sockfd;
+
+    // epoll에 소켓 등록
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sockfd, &event) == -1) {
+        perror("Epoll control failed");
+        close(epoll_fd);
+        close(sockfd);
+        return EXIT_FAILURE;
+    }
+
+    // TODO: name 정규식 검사
+    name[MAX_MSG_LEN];
+    printf("your name : ");
+    fgets(name, MAX_MSG_LEN, stdin);
+    send(sockfd, name, strlen(name), 0);
+    name[MAX_MSG_LEN-1] = '\0';
+    printf("\n");
+
+    // TODO: 콘솔 클리어 후 로고 출력 함수 따로 만들기
+    system("clear");
+    fflush(stdout);
+    printf("====================================================\n");
+    printf("            welcome to chat application!            \n");
+    printf("====================================================\n");
+
+    pthread_t recv_thread, send_thread;
+    pthread_create(&recv_thread, NULL, receive_thread, (void *)&sockfd);
+    pthread_create(&send_thread, NULL, sended_thread, (void *)&sockfd);
+
+    pthread_join(recv_thread, NULL);
+    pthread_join(send_thread, NULL);
+
+    // while(1){
+    //     sleep(1);
+    // }
+
+    close(epoll_fd);
+    close(sockfd);
+    return EXIT_SUCCESS;
 }
-
-static void do_write(int epollfd, int sockfd, char *buf,
-                     int len, struct statistics *stat) {
-    int nwrite;
-    stat->start_time = clock();
-    nwrite = write(sockfd, buf, len);
-    if (nwrite == -1) {
-        perror("Write error:");
-        delete_event(epollfd, sockfd, EPOLLOUT);
-        close(sockfd);
-    }
-    else if (nwrite == 0) {
-        fprintf(stderr, "Server closed.\n");
-        delete_event(epollfd, sockfd, EPOLLOUT);
-        close(sockfd);
-    }
-    else {
-        stat->query_num ++;
-        modify_event(epollfd, sockfd, EPOLLIN);
-    }
-}
-
-static void add_event(int epollfd, int fd, int state) {                            
-    struct epoll_event ev;                                                         
-    ev.events = state;                                                             
-    ev.data.fd = fd;                                                               
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) < 0) {                          
-        printf("Add event failed!\n");                                             
-    }                                                                              
-}                                                                                  
-                                                                                   
-static void delete_event(int epollfd,int fd,int state) {                           
-    struct epoll_event ev;                                                         
-    ev.events = state;                                                             
-    ev.data.fd = fd;                                                               
-    if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &ev) < 0) {                          
-        printf("Delete event failed!\n");                                          
-    }                                                                              
-}                                                                                  
-                                                                                   
-static void modify_event(int epollfd,int fd,int state) {                           
-    struct epoll_event ev;                                                         
-    ev.events = state;                                                             
-    ev.data.fd = fd;                                                               
-    if (epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev) < 0) {                          
-        printf("Modify event failed!\n");                                          
-    }                                                                              
-}         
